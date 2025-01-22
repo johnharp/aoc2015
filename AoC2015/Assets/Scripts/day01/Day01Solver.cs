@@ -1,16 +1,95 @@
+using System.Collections;
 using UnityEngine;
+
 
 public class Day01Solver : MonoBehaviour
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
+    [SerializeField] float msPerStep = 5f;
+    [SerializeField] GameObject Elevator;
+    [SerializeField] GameObject TrailingCubePrefab;
+
+    [SerializeField] private float yPerFloor = 0.75f;
+
+    private int index;
+    private int indexTarget;
+    private string puzzleInput = "";
+
+    private int maxFloorReached;
+    private int minFloorReached;
+
+    private int currentFloor = 0;
+    private int indexEnterBasement = -1;
+
+    private bool isSolving = false;
+
+
     void Start()
     {
-        
+        Solve();
     }
 
-    // Update is called once per frame
-    void Update()
+    private void Update()
     {
-        
+        Elevator.transform.position = new Vector3(0, currentFloor / yPerFloor, 0);
     }
+
+    void Solve()
+    {
+        if (!isSolving)
+        {
+            TextAsset textAsset = Resources.Load<TextAsset>("day01-input");
+            puzzleInput = textAsset.text;
+            indexTarget = puzzleInput.Length - 1;
+
+            index = 0;
+            maxFloorReached = 0;
+            minFloorReached = 0;
+            currentFloor = 0;
+            indexEnterBasement = -1;
+
+            StartCoroutine(Step());
+        }
+
+    }
+
+    private IEnumerator Step()
+    {
+        while (index < indexTarget)
+        {
+            if (index % 100 == 0) Debug.Log(index);
+
+            //yield return null;
+            yield return new WaitForSeconds(msPerStep / 1_000f);
+            if (puzzleInput[index] == '(')
+            {
+                currentFloor++;
+            }
+            else if (puzzleInput[index] == ')')
+            {
+                currentFloor--;
+            }
+
+            if (currentFloor == -1 && indexEnterBasement == -1)
+            {
+                indexEnterBasement = index + 1;
+            }
+
+            if (currentFloor > maxFloorReached) maxFloorReached = currentFloor;
+            if (currentFloor < minFloorReached) minFloorReached = currentFloor;
+            index++;
+
+            if (index % 1 == 0)
+            {
+                Instantiate(TrailingCubePrefab, new Vector3(0, currentFloor/yPerFloor, 0), Quaternion.identity);
+            }
+        }
+
+        isSolving = false;
+        Debug.Log($"Part 1: {currentFloor}");
+        Debug.Log($"Part 2: {indexEnterBasement}");
+
+        Debug.Log($"minFloorReached: {minFloorReached}");
+        Debug.Log($"maxFloorReached: {maxFloorReached}");
+    }
+
 }
