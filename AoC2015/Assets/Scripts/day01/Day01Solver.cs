@@ -1,4 +1,5 @@
 using System.Collections;
+using TMPro;
 using UnityEngine;
 
 
@@ -9,6 +10,13 @@ public class Day01Solver : MonoBehaviour
     [SerializeField] GameObject TrailingCubePrefab;
 
     [SerializeField] private float yPerFloor = 0.75f;
+
+    [SerializeField] TextMeshProUGUI positionText; 
+    [SerializeField] TextMeshProUGUI maximumText; 
+    [SerializeField] TextMeshProUGUI minimumText; 
+    [SerializeField] TextMeshProUGUI basementEnteredText; 
+
+    [SerializeField] GameObject groundCrossedIndicator;
 
     private int index;
     private int indexTarget;
@@ -31,6 +39,9 @@ public class Day01Solver : MonoBehaviour
     private void Update()
     {
         Elevator.transform.position = new Vector3(0, currentFloor / yPerFloor, 0);
+        positionText.text = $"Position: {index + 1}";
+        maximumText.text = $"** Maximum Floor: {maxFloorReached}";
+        minimumText.text = $"Minimum Floor: {minFloorReached}";
     }
 
     void Solve()
@@ -72,6 +83,8 @@ public class Day01Solver : MonoBehaviour
             if (currentFloor == -1 && indexEnterBasement == -1)
             {
                 indexEnterBasement = index + 1;
+                groundCrossedIndicator.GetComponent<MeshRenderer>().enabled = true;
+                basementEnteredText.text = $"** Basement Entered: {indexEnterBasement}";
             }
 
             if (currentFloor > maxFloorReached) maxFloorReached = currentFloor;

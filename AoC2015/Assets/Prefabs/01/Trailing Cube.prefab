@@ -122,7 +122,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6554d751fe4094c31a58f3fde8420e39, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  movePerSecond: {x: -100, y: 0, z: 0}
+  movePerSecond: {x: -300, y: 0, z: 0}
 --- !u!114 &8326494755996707618
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -135,4 +135,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 23e68c49d82834211bcb4ba1194f9f5a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  delaySeconds: 2
+  delaySeconds: 0.5
