@@ -67,8 +67,6 @@ public class Day01Solver : MonoBehaviour
     {
         while (index < indexTarget)
         {
-            if (index % 100 == 0) Debug.Log(index);
-
             //yield return null;
             yield return new WaitForSeconds(msPerStep / 1_000f);
             if (puzzleInput[index] == '(')
