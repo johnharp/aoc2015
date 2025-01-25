@@ -1,222 +1,126 @@
 ﻿using System.Diagnostics;
-using System.Reflection.Metadata;
+using System.Text.RegularExpressions;
 
 namespace day07;
 
 class Program
 {
-    // All wire values in the circuit are stored in a dictionary
-    // Key is the wire identifier (a string)
-    // Value is an ushort (a 16 bit value)
-    private static Dictionary<string, ushort> _circuit = new Dictionary<string, ushort>();
+    // The imported input file with the wire ID (right side of the line) as
+    // the dictionary key and the left expression as the value.
+    private static Dictionary<string, string> _circuit =
+        new Dictionary<string, string>();
+
+    // Memoized results of calls to Evaluate() with the key being the
+    // argument to Evaluate() and the value being the resulting ushort
+    private static Dictionary<string, ushort> _memo =
+        new Dictionary<string, ushort>();
+
+    // OPERATIONS contains all the patterns we understand for the expressions
+    // on the left side of the circuit definition.  For each pattern
+    // we have a function that takes the expression and returns the evaluated
+    // ushort value.  (Note: this is a list of tuples -- Item1 is the regex,
+    // Item2 of the tuple is the function to call for that pattern.)
+    private static List<(Regex, Func<string, ushort>)> OPERATIONS = new List<(Regex, Func<string, ushort>)> {
+
+        // Handle operations that are constant numbers, ex, "123", "555"
+        (new Regex(@"^\d+$"), ushort.Parse),
+
+        // Handle operations that are wire identifiers, ex, "ad", "a", "b"
+        // look the wire up in the _circuit definition and then recursively evaluate
+        (new Regex(@"^[a-z]+$"), s => Evaluate(_circuit[s])),
+
+        // Handle operation of this form: "<arg1> AND <arg2>"
+        (new Regex(@"^\S+ AND \S+$"), s => DoBinaryOp(s, (arg1, arg2) => (ushort)(arg1 & arg2))),
+
+        // Handle operation of this form: "<arg1> OR <arg2>"
+        (new Regex(@"^\S+ OR \S+$"), s => DoBinaryOp(s, (arg1, arg2) => (ushort)(arg1 | arg2))),
+
+
+        // Handle operation of this form: "<arg1> LSHIFT <arg2>"
+        (new Regex(@"^\S+ LSHIFT \S+$"), s => DoBinaryOp(s, (arg1, arg2) => (ushort)(arg1 << arg2))),
+
+        // Handle operation of this form: "<arg1> RSHIFT <arg2>"
+        (new Regex(@"^\S+ RSHIFT \S+$"), s => DoBinaryOp(s, (arg1, arg2) => (ushort)(arg1 >> arg2))),
+
+        // Handle operation of this form: "NOT <arg1>"
+        (new Regex(@"^NOT \S+$"), DoUnaryOp)
+    };
+
 
     static void Main(string[] args)
     {
         string basedir = AppDomain.CurrentDomain.BaseDirectory;
-        string prefix = "../../../";
-        //string filename = "input-sample.txt";
-        string filename = "input.txt";
-        string filename2 = "input2.txt";
         Directory.SetCurrentDirectory(basedir);
 
-        string[] lines = File.ReadAllLines($"{prefix}{filename}");
-        string[] lines2 = File.ReadAllLines($"{prefix}{filename2}");
-        ApplyAllLines(lines);
-
-        ushort? part1 = Get("a");
+        Reset("input.txt");
+        ushort part1 = Evaluate("a");
         Console.WriteLine($"Part 1: {part1}");
 
-        Reset();
-        ApplyAllLines(lines2);
-
-        ushort? part2 = Get("a");
+        Reset("input.txt");
+        // override definitino for wire b to the result from part 1
+        _circuit["b"] = part1.ToString();
+        ushort part2 = Evaluate("a");
         Console.WriteLine($"Part 2: {part2}");
     }
 
-    private static void ApplyAllLines(string[] lines)
+    private static ushort DoBinaryOp(string s, Func<ushort, ushort, ushort> f)
     {
-        bool changes = true;
+        string[] parts = s.Split();
+        ushort arg1 = Evaluate(parts[0]);
+        ushort arg2 = Evaluate(parts[2]);
 
-        while (changes)
+        return f(arg1, arg2);
+    }
+
+    private static ushort DoUnaryOp(string s)
+    {
+        string remaining = s.Replace("NOT ", "");
+        return (ushort)~Evaluate(remaining);
+    }
+
+    private static ushort Evaluate(string s)
+    {
+        if (_memo.ContainsKey(s)) return _memo[s];
+
+
+        foreach (var op in OPERATIONS)
         {
-            changes = false;
-
-            foreach(string line in lines)
+            if (op.Item1.IsMatch(s))
             {
-                if (HandleLine(line))
-                {
-                    changes = true;
-                }
+                _memo[s] = op.Item2(s);
+                return _memo[s];
             }
         }
+
+        throw new Exception($"Cannot Evaluate string '{s}'");
     }
 
-    private static void Reset()
+
+    private static void Reset(string filename)
     {
-        _circuit = new Dictionary<string, ushort>();
-    }
+        _circuit = new Dictionary<string, string>();
+        _memo = new Dictionary<string, ushort>();
 
-    private static void TestLine(string line)
-    {
-        Console.WriteLine("==============================");
-        Console.WriteLine(line);
-        HandleLine(line);
-        Dump();
-    }
+        string prefix = "../../../";
+        string[] lines = File.ReadAllLines($"{prefix}{filename}");
 
-    private static void Dump()
-    {
-        List<String> keys = _circuit.Keys.ToList();
-        keys.Sort();
-        foreach(string key in keys)
+        foreach (string line in lines)
         {
-            Console.WriteLine($"{key}: {_circuit[key]}");
+            // Each input line will be of the form:
+            // [value] => [id]
+            // where [id] is a wire identifier
+            // the [value] could be any of the expression types such as:
+            // * a constant number
+            // * another wire identifier
+            // * an operation AND, OR, LSHIFT, RSHIFT, or NOT each of which
+            //   can have arguments that are also [values]
+            string[] parts = line.Split(" -> ");
+            string id = parts[1];
+            string value = parts[0];
+            Debug.Assert(!_circuit.ContainsKey(id),
+                "More than one input to a wire is invalid!");
+            _circuit[id] = value;
         }
-    }
-
-    private static bool HandleLine(string line)
-    {
-        string[] parts = line.Split(" -> ");
-        Debug.Assert(parts.Length == 2, $"Bad input format: {line}");
-
-        string operation = parts[0];
-        string outWire = parts[1];
-    
-        ushort? value = ComputeOutput(operation);
-        ushort? oldValue = Get(outWire);
-        Set(outWire, value);
-        return value != oldValue;
-    }
-
-    private static ushort? ComputeOutput(string op)
-    {
-        if (op.Contains(" AND ")) return AND(op);
-        else if (op.Contains(" OR ")) return OR(op);
-        else if (op.Contains(" LSHIFT ")) return LSHIFT(op);
-        else if (op.Contains(" RSHIFT ")) return RSHIFT(op);
-        else if (op.Contains("NOT ")) return NOT(op);
-        else return CONST(op);
-    }
-
-    private static ushort? GetValueOf(string s)
-    {
-        ushort value;
-
-        if (ushort.TryParse(s, out value)) {
-            return value;
-        }
-        else
-        {
-            return Get(s);
-        }
-    }
-
-    private static ushort? AND(string operation)
-    {
-        string[] parts = operation.Split(" AND ");
-        Debug.Assert(parts.Length == 2, "AND operation expects two args");
-        ushort? arg1 = GetValueOf(parts[0]);
-        ushort? arg2 = GetValueOf(parts[1]);
-
-        if (arg1.HasValue && arg2.HasValue)
-        {
-            return (ushort) (arg1.Value & arg2.Value);
-        }
-        else
-        {
-            return null;
-        }
-    }
-
-    private static ushort? OR(string operation)
-    {
-        string[] parts = operation.Split(" OR ");
-        Debug.Assert(parts.Length == 2, "OR operation expects two args");
-        ushort? arg1 = GetValueOf(parts[0]);
-        ushort? arg2 = GetValueOf(parts[1]);
-
-        if (arg1.HasValue && arg2.HasValue)
-        {
-            return (ushort) (arg1.Value | arg2.Value);
-        }
-        else
-        {
-            return null;
-        }
-    }
-
-    private static ushort? LSHIFT(string operation)
-    {
-        string[] parts = operation.Split(" LSHIFT ");
-        Debug.Assert(parts.Length == 2, "LSHIFT operation expects two args");
-        ushort? arg1 = GetValueOf(parts[0]);
-        ushort? arg2 = GetValueOf(parts[1]);
-
-        if (arg1.HasValue && arg2.HasValue)
-        {
-            return (ushort) (arg1.Value << arg2.Value);
-        }
-        else
-        {
-            return null;
-        }
-    }
-
-    private static ushort? RSHIFT(string operation)
-    {
-        string[] parts = operation.Split(" RSHIFT ");
-        Debug.Assert(parts.Length == 2, "RSHIFT operation expects two args");
-        ushort? arg1 = GetValueOf(parts[0]);
-        ushort? arg2 = GetValueOf(parts[1]);
-
-        if (arg1.HasValue && arg2.HasValue)
-        {
-            return (ushort) (arg1.Value >> arg2.Value);
-        }
-        else
-        {
-            return null;
-        }
-    }
-
-    private static ushort? NOT(string operation)
-    {
-        string a = operation.Replace("NOT ", "");
-        ushort? arg1 = GetValueOf(a);
-
-        if (arg1.HasValue)
-        {
-            return (ushort) (~arg1.Value);
-        }
-        else
-        {
-            return null;
-        }
-    }
-
-    private static ushort? CONST(string operation)
-    {
-        return GetValueOf(operation);
-    }
-
-    private static void Set(string id, ushort? value)
-    {
-        if (value.HasValue)
-        {
-            _circuit[id] = value.Value;
-        }
-    }
-
-    private static ushort? Get(string id)
-    {
-        if (!_circuit.ContainsKey(id))
-        {
-            return null;
-        }
-        else
-        {
-            return _circuit[id];
-        }
-
     }
 }
+
